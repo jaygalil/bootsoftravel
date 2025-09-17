@@ -8,32 +8,100 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MapPin, Clock, FileText, Users, Settings, LogOut } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
-export default function AttendanceDashboard() {
-  const [userRole, setUserRole] = useState<'ADMIN' | 'AGENT'>('AGENT')
-  const [currentTime, setCurrentTime] = useState(new Date())
-  const [isClockedIn, setIsClockedIn] = useState(false)
-  const [activeCheckpoint, setActiveCheckpoint] = useState<string | null>(null)
-  const { toast } = useToast()
+// Client-only time component to avoid hydration issues
+function ClientTime() {
+  const [currentTime, setCurrentTime] = useState<Date | null>(null)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
+    setCurrentTime(new Date())
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
 
+  if (!mounted || !currentTime) {
+    return <span className="text-slate-600">Loading...</span>
+  }
+
+  return (
+    <span className="text-slate-600">
+      {currentTime.toLocaleDateString()} • {currentTime.toLocaleTimeString()}
+    </span>
+  )
+}
+
+interface User {
+  id: string
+  email: string
+  name: string
+  role: 'ADMIN' | 'AGENT'
+}
+
+export default function AttendanceDashboard() {
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [isClockedIn, setIsClockedIn] = useState(false)
+  const [activeCheckpoint, setActiveCheckpoint] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const { toast } = useToast()
+
+  useEffect(() => {
+    fetchCurrentUser()
+  }, [])
+
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await fetch('/api/auth/me')
+      if (response.ok) {
+        const data = await response.json()
+        setCurrentUser(data.user)
+      } else {
+        // User not authenticated, will show login prompt
+        console.log('User not authenticated')
+      }
+    } catch (error) {
+      console.log('Failed to fetch current user:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/auth/logout', { method: 'POST' })
+      if (response.ok) {
+        toast({
+          title: "Logged Out",
+          description: "You have been successfully logged out",
+        })
+      }
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      // Clear user state and redirect
+      setCurrentUser(null)
+      // Use a slight delay to allow toast to show
+      setTimeout(() => {
+        window.location.href = '/auth'
+      }, 1000)
+    }
+  }
+
   const handleClockInOut = () => {
+    const now = new Date()
     if (isClockedIn) {
       setIsClockedIn(false)
       setActiveCheckpoint(null)
       toast({
         title: "Clocked Out",
-        description: "Successfully clocked out at " + currentTime.toLocaleTimeString(),
+        description: "Successfully clocked out at " + now.toLocaleTimeString(),
       })
     } else {
       setIsClockedIn(true)
       setActiveCheckpoint("Main Office")
       toast({
         title: "Clocked In",
-        description: "Successfully clocked in at " + currentTime.toLocaleTimeString(),
+        description: "Successfully clocked in at " + now.toLocaleTimeString(),
       })
     }
   }
@@ -45,6 +113,41 @@ export default function AttendanceDashboard() {
     })
   }
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
+        <div className="w-full max-w-md text-center">
+          <h1 className="text-3xl font-bold text-slate-800 mb-4">Attendance Monitoring System</h1>
+          <p className="text-slate-600 mb-8">You need to login to access the dashboard</p>
+          <div className="space-y-4">
+            <button 
+              onClick={() => window.location.href = '/auth'}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              Go to Login Page
+            </button>
+            <div className="text-sm text-slate-500 space-y-1">
+              <p><strong>Demo Credentials:</strong></p>
+              <p>Admin: admin@example.com / password123</p>
+              <p>Agent: agent@example.com / password123</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -52,13 +155,17 @@ export default function AttendanceDashboard() {
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-800">Attendance Monitoring System</h1>
-            <p className="text-slate-600 mt-2">
-              {currentTime.toLocaleDateString()} • {currentTime.toLocaleTimeString()}
+            <p className="mt-2">
+              <ClientTime />
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <Badge variant={userRole === 'ADMIN' ? 'default' : 'secondary'}>
-              {userRole}
+            <div className="text-right mr-4">
+              <p className="text-sm font-medium text-slate-800">{currentUser.name}</p>
+              <p className="text-xs text-slate-600">{currentUser.email}</p>
+            </div>
+            <Badge variant={currentUser.role === 'ADMIN' ? 'default' : 'secondary'}>
+              {currentUser.role}
             </Badge>
             <Button 
               variant="outline" 
@@ -72,7 +179,7 @@ export default function AttendanceDashboard() {
               <Settings className="w-4 h-4 mr-2" />
               Settings
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4 mr-2" />
               Logout
             </Button>
@@ -85,7 +192,7 @@ export default function AttendanceDashboard() {
             <TabsTrigger value="attendance">Attendance</TabsTrigger>
             <TabsTrigger value="checkpoints">Checkpoints</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
-            {userRole === 'ADMIN' && <TabsTrigger value="admin">Admin</TabsTrigger>}
+            {currentUser.role === 'ADMIN' && <TabsTrigger value="admin">Admin</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-6">
@@ -310,7 +417,7 @@ export default function AttendanceDashboard() {
             </Card>
           </TabsContent>
 
-          {userRole === 'ADMIN' && (
+          {currentUser.role === 'ADMIN' && (
             <TabsContent value="admin" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
