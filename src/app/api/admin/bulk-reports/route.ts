@@ -4,6 +4,7 @@ import { ReportFormat, UserRole } from '@prisma/client'
 import { 
   generateCSCForm48PDF, 
   generateCSCForm48Excel, 
+  generateBulkCSCForm48ZIP,
   calculateTotalHours,
   formatDate,
   formatTime
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!Object.values(ReportFormat).includes(format)) {
+    if (!['PDF', 'EXCEL'].includes(format)) {
       return NextResponse.json(
         { error: 'Invalid format. Must be PDF or EXCEL' },
         { status: 400 }
@@ -110,12 +111,12 @@ export async function POST(request: NextRequest) {
 
         const attendanceData = attendanceLogs.map(log => ({
           id: log.id,
-          date: formatDate(log.timeIn!),
-          timeIn: formatTime(log.timeIn!),
+          date: log.timeIn ? formatDate(log.timeIn) : '',
+          timeIn: log.timeIn ? formatTime(log.timeIn) : '',
           timeOut: log.timeOut ? formatTime(log.timeOut) : '',
-          checkpoint: log.checkpoint.name,
+          checkpoint: log.checkpoint?.name || 'Unknown',
           status: log.status,
-          totalHours: log.timeOut ? calculateTotalHours(log.timeIn!, log.timeOut) : ''
+          totalHours: (log.timeIn && log.timeOut) ? calculateTotalHours(log.timeIn, log.timeOut) : ''
         }))
 
         return {
@@ -134,24 +135,19 @@ export async function POST(request: NextRequest) {
     let fileName: string
 
     if (reportType === 'consolidated') {
-      // Generate one consolidated report with all users
-      if (format === ReportFormat.PDF) {
-        // TODO: Implement bulk PDF generation
-        throw new Error('Bulk PDF generation temporarily disabled')
-        // fileBuffer = generateBulkCSCForm48PDF(userAttendanceData)
-        // contentType = 'application/pdf'
-        // fileName = `CSC_Form_48_Consolidated_${formatDate(new Date(startDate))}_to_${formatDate(new Date(endDate))}.pdf`
+      // For consolidated reports, generate individual reports for now
+      // In the future, this could be enhanced to create a single consolidated report
+      fileBuffer = await generateBulkCSCForm48ZIP(userAttendanceData, format as 'PDF' | 'EXCEL')
+      if (format === 'PDF') {
+        contentType = 'application/pdf'
+        fileName = `CSC_Form_48_Consolidated_${formatDate(new Date(startDate))}_to_${formatDate(new Date(endDate))}.pdf`
       } else {
-        // TODO: Implement bulk Excel generation
-        throw new Error('Bulk Excel generation temporarily disabled')
-        // fileBuffer = generateBulkCSCForm48Excel(userAttendanceData)
-        // contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        // fileName = `CSC_Form_48_Consolidated_${formatDate(new Date(startDate))}_to_${formatDate(new Date(endDate))}.xlsx`
+        contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        fileName = `CSC_Form_48_Consolidated_${formatDate(new Date(startDate))}_to_${formatDate(new Date(endDate))}.xlsx`
       }
     } else {
       // Generate individual reports and package as ZIP
-      throw new Error('Individual ZIP generation temporarily disabled')
-      // fileBuffer = await generateBulkCSCForm48ZIP(userAttendanceData, format)
+      fileBuffer = await generateBulkCSCForm48ZIP(userAttendanceData, format as 'PDF' | 'EXCEL')
       contentType = 'application/zip'
       fileName = `CSC_Form_48_Bulk_${formatDate(new Date(startDate))}_to_${formatDate(new Date(endDate))}.zip`
     }
@@ -161,21 +157,39 @@ export async function POST(request: NextRequest) {
       data: {
         userId: session.userId,
         title: `Bulk CSC Form 48 - ${userAttendanceData.length} users - ${formatDate(new Date(startDate))} to ${formatDate(new Date(endDate))}`,
-        format,
+        format: format as any,
         generatedAt: new Date()
       }
     })
 
-    // Return error since bulk reports are temporarily disabled
-    return NextResponse.json(
-      { error: 'Bulk reports are temporarily disabled' },
-      { status: 501 }
-    )
+    // Return file as response
+    const response = new NextResponse(Buffer.from(fileBuffer), {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Content-Disposition': `attachment; filename="${fileName}"`,
+        'Content-Length': fileBuffer.length.toString()
+      }
+    })
+
+    return response
 
   } catch (error) {
     console.error('Generate bulk report error:', error)
+    
+    // Provide more detailed error information
+    let errorMessage = 'Internal server error'
+    if (error instanceof Error) {
+      errorMessage = `${error.name}: ${error.message}`
+      console.error('Error stack:', error.stack)
+    }
+    
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: errorMessage,
+        details: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     )
   }

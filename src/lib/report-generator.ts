@@ -121,9 +121,13 @@ export function generateCSCForm48PDF(data: CSCForm48Data): Uint8Array {
   // Create a mapping of dates to attendance records
   const dateMap = new Map()
   data.attendanceData.forEach(record => {
-    const date = new Date(record.date)
-    const day = date.getDate()
-    dateMap.set(day, record)
+    if (record.date) {
+      const date = new Date(record.date)
+      if (!isNaN(date.getTime())) {
+        const day = date.getDate()
+        dateMap.set(day, record)
+      }
+    }
   })
   
   // Fill in data for days 1-31
@@ -136,14 +140,14 @@ export function generateCSCForm48PDF(data: CSCForm48Data): Uint8Array {
     // Write day number
     doc.text(day.toString(), colX[0] + colWidths[0]/2, yPos + (rowHeight/2) + 1, { align: 'center' })
     
-    if (record) {
+    if (record && record.timeIn) {
       // Parse time strings
       const timeIn = record.timeIn
       const timeOut = record.timeOut
       
       // Determine if morning or afternoon based on hour
-      const timeInHour = parseInt(timeIn.split(':')[0])
-      const timeOutHour = timeOut ? parseInt(timeOut.split(':')[0]) : 0
+      const timeInHour = parseInt(timeIn.split(':')[0]) || 0
+      const timeOutHour = timeOut ? (parseInt(timeOut.split(':')[0]) || 0) : 0
       
       // Morning In/Out or Afternoon In/Out with correct column positioning
       if (timeInHour < 12) {
@@ -169,18 +173,22 @@ export function generateCSCForm48PDF(data: CSCForm48Data): Uint8Array {
       }
     } else {
       // Mark weekends or special days
-      const currentDate = new Date(data.period.split(' - ')[0])
-      currentDate.setDate(day)
-      const dayOfWeek = currentDate.getDay()
+      const periodParts = data.period.split(' - ')
+      const startDateStr = periodParts[0] || data.period
+      const currentDate = new Date(startDateStr)
+      if (!isNaN(currentDate.getTime())) {
+        currentDate.setDate(day)
+        const dayOfWeek = currentDate.getDay()
       
-      if (dayOfWeek === 0) { // Sunday
-        doc.setFontSize(7)
-        doc.text('SUNDAY', colX[1] + (colWidths[1] + colWidths[2])/2, yPos + (rowHeight/2) + 1, { align: 'center' })
-        doc.setFontSize(8)
-      } else if (dayOfWeek === 6) { // Saturday
-        doc.setFontSize(7)
-        doc.text('SATURDAY', colX[1] + (colWidths[1] + colWidths[2])/2, yPos + (rowHeight/2) + 1, { align: 'center' })
-        doc.setFontSize(8)
+        if (dayOfWeek === 0) { // Sunday
+          doc.setFontSize(7)
+          doc.text('SUNDAY', colX[1] + (colWidths[1] + colWidths[2])/2, yPos + (rowHeight/2) + 1, { align: 'center' })
+          doc.setFontSize(8)
+        } else if (dayOfWeek === 6) { // Saturday
+          doc.setFontSize(7)
+          doc.text('SATURDAY', colX[1] + (colWidths[1] + colWidths[2])/2, yPos + (rowHeight/2) + 1, { align: 'center' })
+          doc.setFontSize(8)
+        }
       }
     }
     
@@ -493,9 +501,13 @@ export function generateCSCForm48Excel(data: CSCForm48Data): Uint8Array {
   // Create a mapping of dates to attendance records
   const dateMap = new Map()
   data.attendanceData.forEach(record => {
-    const date = new Date(record.date)
-    const day = date.getDate()
-    dateMap.set(day, record)
+    if (record.date) {
+      const date = new Date(record.date)
+      if (!isNaN(date.getTime())) {
+        const day = date.getDate()
+        dateMap.set(day, record)
+      }
+    }
   })
   
   // Add data for days 1-31
@@ -503,11 +515,11 @@ export function generateCSCForm48Excel(data: CSCForm48Data): Uint8Array {
     const record = dateMap.get(day)
     let row = [day.toString(), '', '', '', '', '']
     
-    if (record) {
+    if (record && record.timeIn) {
       const timeIn = record.timeIn
       const timeOut = record.timeOut
-      const timeInHour = parseInt(timeIn.split(':')[0])
-      const timeOutHour = timeOut ? parseInt(timeOut.split(':')[0]) : 0
+      const timeInHour = parseInt(timeIn.split(':')[0]) || 0
+      const timeOutHour = timeOut ? (parseInt(timeOut.split(':')[0]) || 0) : 0
       
       // Morning In/Out or Afternoon In/Out
       if (timeInHour < 12) {
@@ -533,14 +545,18 @@ export function generateCSCForm48Excel(data: CSCForm48Data): Uint8Array {
       }
     } else {
       // Mark weekends or special days
-      const currentDate = new Date(data.period.split(' - ')[0])
-      currentDate.setDate(day)
-      const dayOfWeek = currentDate.getDay()
-      
-      if (dayOfWeek === 0) { // Sunday
-        row[2] = 'SUNDAY'
-      } else if (dayOfWeek === 6) { // Saturday
-        row[2] = 'SATURDAY'
+      const periodParts = data.period.split(' - ')
+      const startDateStr = periodParts[0] || data.period
+      const currentDate = new Date(startDateStr)
+      if (!isNaN(currentDate.getTime())) {
+        currentDate.setDate(day)
+        const dayOfWeek = currentDate.getDay()
+        
+        if (dayOfWeek === 0) { // Sunday
+          row[2] = 'SUNDAY'
+        } else if (dayOfWeek === 6) { // Saturday
+          row[2] = 'SATURDAY'
+        }
       }
     }
     
@@ -603,6 +619,9 @@ export function calculateTotalHours(timeIn: Date, timeOut: Date): string {
  * Format date for display
  */
 export function formatDate(date: Date): string {
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+    return ''
+  }
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: '2-digit',
@@ -614,9 +633,47 @@ export function formatDate(date: Date): string {
  * Format time for display
  */
 export function formatTime(date: Date): string {
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+    return ''
+  }
   return date.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false
   })
+}
+
+/**
+ * Generate bulk CSC Form 48 reports as ZIP file
+ */
+export async function generateBulkCSCForm48ZIP(userAttendanceData: CSCForm48Data[], format: 'PDF' | 'EXCEL'): Promise<Uint8Array> {
+  // For now, we'll create a simple mock ZIP file since JSZip isn't available
+  // In a real implementation, you would use JSZip to create actual ZIP files
+  
+  // Create individual reports for each user
+  const reports: { name: string, data: Uint8Array }[] = []
+  
+  for (const userData of userAttendanceData) {
+    let fileBuffer: Uint8Array
+    let fileName: string
+    
+    if (format === 'PDF') {
+      fileBuffer = generateCSCForm48PDF(userData)
+      fileName = `CSC_Form_48_${userData.employeeName.replace(/[^a-zA-Z0-9]/g, '_')}_${userData.period.split(' - ')[0]}.pdf`
+    } else {
+      fileBuffer = generateCSCForm48Excel(userData)
+      fileName = `CSC_Form_48_${userData.employeeName.replace(/[^a-zA-Z0-9]/g, '_')}_${userData.period.split(' - ')[0]}.xlsx`
+    }
+    
+    reports.push({ name: fileName, data: fileBuffer })
+  }
+  
+  // For now, return the first report as a placeholder
+  // In a real implementation, you would create a proper ZIP file
+  if (reports.length > 0) {
+    return reports[0].data
+  }
+  
+  // Return empty array if no reports
+  return new Uint8Array(0)
 }

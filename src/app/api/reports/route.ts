@@ -12,6 +12,8 @@ import {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('POST /api/reports - Starting report generation')
+    
     // Get session from cookie
     const sessionCookie = request.cookies.get('user-session')
     
@@ -23,7 +25,11 @@ export async function POST(request: NextRequest) {
     }
 
     const session = JSON.parse(sessionCookie.value)
-    const { format, startDate, endDate, userId } = await request.json()
+    console.log('Session:', session)
+    
+    const requestBody = await request.json()
+    console.log('Request body:', requestBody)
+    const { format, startDate, endDate, userId } = requestBody
 
     // Validate input
     if (!format || !startDate || !endDate) {
@@ -44,6 +50,7 @@ export async function POST(request: NextRequest) {
     const targetUserId = userId || session.userId
 
     // Get user info
+    console.log('Querying user with ID:', targetUserId)
     const user = await db.user.findUnique({
       where: { id: targetUserId },
       select: {
@@ -52,6 +59,7 @@ export async function POST(request: NextRequest) {
         email: true
       }
     })
+    console.log('User found:', user)
 
     if (!user) {
       return NextResponse.json(
@@ -61,6 +69,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get attendance data for the specified period
+    console.log('Querying attendance logs for user:', targetUserId, 'from:', startDate, 'to:', endDate)
     const attendanceLogs = await db.attendanceLog.findMany({
       where: {
         userId: targetUserId,
@@ -80,6 +89,7 @@ export async function POST(request: NextRequest) {
         timeIn: 'asc'
       }
     })
+    console.log('Attendance logs found:', attendanceLogs.length)
 
     // Prepare data for report generation
     const attendanceData = attendanceLogs.map(log => ({
@@ -143,8 +153,20 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Generate report error:', error)
+    
+    // Provide more detailed error information
+    let errorMessage = 'Internal server error'
+    if (error instanceof Error) {
+      errorMessage = `${error.name}: ${error.message}`
+      console.error('Error stack:', error.stack)
+    }
+    
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: errorMessage,
+        details: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     )
   }
@@ -180,8 +202,20 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Get reports error:', error)
+    
+    // Provide more detailed error information
+    let errorMessage = 'Internal server error'
+    if (error instanceof Error) {
+      errorMessage = `${error.name}: ${error.message}`
+      console.error('Error stack:', error.stack)
+    }
+    
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: errorMessage,
+        details: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     )
   }
