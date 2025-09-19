@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogPortal, DialogOverlay } from '@/components/ui/dialog'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, AlertDialogPortal, AlertDialogOverlay } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { MapPin, Navigation, Users, Clock, Plus, Map, ChevronLeft, ChevronRight, Grid, List, Search, Filter, Power } from 'lucide-react'
+import { MapPin, Navigation, Users, Clock, Plus, Map, ChevronLeft, ChevronRight, Grid, List, Search, Filter, Power, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import dynamic from 'next/dynamic'
 
@@ -67,6 +68,8 @@ export default function CheckpointsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   // itemsPerPage is now calculated dynamically in the pagination logic
   const [togglingCheckpoints, setTogglingCheckpoints] = useState<Set<string>>(new Set())
+  const [deletingCheckpoints, setDeletingCheckpoints] = useState<Set<string>>(new Set())
+  const [checkpointToDelete, setCheckpointToDelete] = useState<Checkpoint | null>(null)
   const [newCheckpoint, setNewCheckpoint] = useState({
     name: '',
     description: '',
@@ -396,6 +399,52 @@ export default function CheckpointsPage() {
     }
   }
 
+  const deleteCheckpoint = async (checkpoint: Checkpoint) => {
+    // Add to deleting set to show loading state
+    setDeletingCheckpoints(prev => new Set(prev).add(checkpoint.id))
+    
+    try {
+      const response = await fetch(`/api/checkpoints/${checkpoint.id}`, {
+        method: 'DELETE'
+      })
+      
+      if (response.ok) {
+        toast({
+          title: "Checkpoint Deleted",
+          description: `"${checkpoint.name}" has been permanently deleted`,
+        })
+        // Clear selected checkpoint if it was deleted
+        if (selectedCheckpoint?.id === checkpoint.id) {
+          setSelectedCheckpoint(null)
+        }
+        // Refresh checkpoints to get updated data
+        fetchCheckpoints()
+      } else {
+        const data = await response.json()
+        toast({
+          title: "Error",
+          description: data.error || "Failed to delete checkpoint",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Network error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      // Remove from deleting set
+      setDeletingCheckpoints(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(checkpoint.id)
+        return newSet
+      })
+      // Clear the checkpoint to delete
+      setCheckpointToDelete(null)
+    }
+  }
+
   // Filter and paginate checkpoints
   const filteredCheckpoints = checkpoints.filter(checkpoint => {
     const matchesSearch = checkpoint.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -657,6 +706,24 @@ export default function CheckpointsPage() {
                                   Inactive
                                 </Button>
                               )}
+                              {currentUser?.role === 'ADMIN' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setCheckpointToDelete(checkpoint)
+                                  }}
+                                  disabled={deletingCheckpoints.has(checkpoint.id)}
+                                >
+                                  {deletingCheckpoints.has(checkpoint.id) ? (
+                                    <div className="w-3 h-3 border border-red-300 border-t-red-600 rounded-full animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-3 h-3" />
+                                  )}
+                                </Button>
+                              )}
                             </div>
                           </div>
                         )
@@ -752,6 +819,24 @@ export default function CheckpointsPage() {
                                   disabled
                                 >
                                   <Power className="w-3 h-3" />
+                                </Button>
+                              )}
+                              {currentUser?.role === 'ADMIN' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-xs px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setCheckpointToDelete(checkpoint)
+                                  }}
+                                  disabled={deletingCheckpoints.has(checkpoint.id)}
+                                >
+                                  {deletingCheckpoints.has(checkpoint.id) ? (
+                                    <div className="w-3 h-3 border border-red-300 border-t-red-600 rounded-full animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-3 h-3" />
+                                  )}
                                 </Button>
                               )}
                             </div>
@@ -862,7 +947,13 @@ export default function CheckpointsPage() {
             checkpoints={checkpoints}
             userLocation={userLocation}
             selectedCheckpointId={selectedCheckpoint?.id || null}
-            onCheckpointSelect={(checkpoint) => setSelectedCheckpoint(checkpoint)}
+            onCheckpointSelect={(checkpoint) => {
+              // Find the full checkpoint with createdAt and updatedAt
+              const fullCheckpoint = checkpoints.find(c => c.id === checkpoint.id)
+              if (fullCheckpoint) {
+                setSelectedCheckpoint(fullCheckpoint)
+              }
+            }}
             height="100%"
           />
         </div>
@@ -893,7 +984,9 @@ export default function CheckpointsPage() {
 
         {/* Map Modal */}
         <Dialog open={isMapModalOpen} onOpenChange={setIsMapModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogPortal>
+            <DialogOverlay />
+            <DialogContent className="max-w-4xl max-h-[90vh]">
             <DialogHeader>
               <DialogTitle>
                 {selectedCheckpoint ? `${selectedCheckpoint.name} - Location & Radius` : 'Select Location & Radius'}
@@ -1012,13 +1105,16 @@ export default function CheckpointsPage() {
                 </>
               )}
             </DialogFooter>
-          </DialogContent>
+            </DialogContent>
+          </DialogPortal>
         </Dialog>
       </div>
       
       {/* Add Checkpoint Dialog - Moved outside the main layout to fix z-index issues */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogPortal>
+          <DialogOverlay />
+          <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Add New Checkpoint</DialogTitle>
             <DialogDescription>
@@ -1133,8 +1229,49 @@ export default function CheckpointsPage() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+          </DialogContent>
+        </DialogPortal>
       </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={checkpointToDelete !== null} onOpenChange={(open) => !open && setCheckpointToDelete(null)}>
+        <AlertDialogPortal>
+          <AlertDialogOverlay className="z-[10001]" style={{zIndex: 10001}} />
+          <div className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-[10002] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 sm:max-w-lg" style={{zIndex: 10002}} data-state="open">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Checkpoint</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{checkpointToDelete?.name}"? This action cannot be undone and will permanently remove the checkpoint and all associated attendance records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => setCheckpointToDelete(null)}
+              disabled={checkpointToDelete ? deletingCheckpoints.has(checkpointToDelete.id) : false}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => checkpointToDelete && deleteCheckpoint(checkpointToDelete)}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={checkpointToDelete ? deletingCheckpoints.has(checkpointToDelete.id) : false}
+            >
+              {checkpointToDelete && deletingCheckpoints.has(checkpointToDelete.id) ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Checkpoint
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+          </div>
+        </AlertDialogPortal>
+      </AlertDialog>
     </div>
   )
 }

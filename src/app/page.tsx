@@ -5,8 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { MapPin, Clock, FileText, Users, Settings, LogOut } from 'lucide-react'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { MapPin, Clock, FileText, Users, Settings, LogOut, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { ReportGenerator } from '@/components/ReportGenerator'
 
 // Client-only time component to avoid hydration issues
 function ClientTime() {
@@ -43,9 +45,13 @@ export default function AttendanceDashboard() {
   const [isClockedIn, setIsClockedIn] = useState(false)
   const [activeCheckpoint, setActiveCheckpoint] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [checkpointToDelete, setCheckpointToDelete] = useState<{id: string, name: string} | null>(null)
+  const [deletingCheckpoint, setDeletingCheckpoint] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
+    setMounted(true)
     fetchCurrentUser()
   }, [])
 
@@ -81,9 +87,11 @@ export default function AttendanceDashboard() {
       // Clear user state and redirect
       setCurrentUser(null)
       // Use a slight delay to allow toast to show
-      setTimeout(() => {
-        window.location.href = '/auth'
-      }, 1000)
+      if (mounted) {
+        setTimeout(() => {
+          window.location.href = '/auth'
+        }, 1000)
+      }
     }
   }
 
@@ -113,6 +121,39 @@ export default function AttendanceDashboard() {
     })
   }
 
+  const deleteCheckpoint = async (checkpointId: string, name: string) => {
+    setDeletingCheckpoint(true)
+    
+    try {
+      const response = await fetch(`/api/checkpoints/${checkpointId}`, {
+        method: 'DELETE'
+      })
+      
+      if (response.ok) {
+        toast({
+          title: "Checkpoint Deleted",
+          description: `"${name}" has been permanently deleted`,
+        })
+      } else {
+        const data = await response.json()
+        toast({
+          title: "Error",
+          description: data.error || "Failed to delete checkpoint",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Network error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingCheckpoint(false)
+      setCheckpointToDelete(null)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
@@ -125,24 +166,15 @@ export default function AttendanceDashboard() {
   }
 
   if (!currentUser) {
+    // Redirect to auth page if not authenticated
+    if (mounted) {
+      window.location.href = '/auth'
+    }
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
-        <div className="w-full max-w-md text-center">
-          <h1 className="text-3xl font-bold text-slate-800 mb-4">Attendance Monitoring System</h1>
-          <p className="text-slate-600 mb-8">You need to login to access the dashboard</p>
-          <div className="space-y-4">
-            <button 
-              onClick={() => window.location.href = '/auth'}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-            >
-              Go to Login Page
-            </button>
-            <div className="text-sm text-slate-500 space-y-1">
-              <p><strong>Demo Credentials:</strong></p>
-              <p>Admin: admin@example.com / password123</p>
-              <p>Agent: agent@example.com / password123</p>
-            </div>
-          </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Redirecting to login...</p>
         </div>
       </div>
     )
@@ -155,7 +187,7 @@ export default function AttendanceDashboard() {
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-800">Attendance Monitoring System</h1>
-            <p className="mt-2">
+            <p className="mt-2" suppressHydrationWarning>
               <ClientTime />
             </p>
           </div>
@@ -170,7 +202,7 @@ export default function AttendanceDashboard() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => window.location.href = '/checkpoints'}
+              onClick={() => mounted && (window.location.href = '/checkpoints')}
             >
               <MapPin className="w-4 h-4 mr-2" />
               Checkpoints
@@ -265,10 +297,22 @@ export default function AttendanceDashboard() {
                     <Clock className="w-4 h-4 mr-2" />
                     {isClockedIn ? 'Clock Out' : 'Clock In'}
                   </Button>
-                  <Button variant="outline" size="lg">
-                    <MapPin className="w-4 h-4 mr-2" />
-                    View Checkpoints
-                  </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => window.location.href = '/attendance'}
+            >
+              <Clock className="w-4 h-4 mr-2" />
+              Attendance Tracking
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => window.location.href = '/checkpoints'}
+            >
+              <MapPin className="w-4 h-4 mr-2" />
+              View Checkpoints
+            </Button>
                 </div>
                 
                 <div className="border-t pt-4">
@@ -371,7 +415,7 @@ export default function AttendanceDashboard() {
                 <div className="mt-6 pt-4 border-t">
                   <Button 
                     className="w-full"
-                    onClick={() => window.location.href = '/checkpoints'}
+                    onClick={() => mounted && (window.location.href = '/checkpoints')}
                   >
                     <MapPin className="w-4 h-4 mr-2" />
                     View All Checkpoints
@@ -382,39 +426,7 @@ export default function AttendanceDashboard() {
           </TabsContent>
 
           <TabsContent value="reports" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Generated Reports</CardTitle>
-                <CardDescription>
-                  Download your CSC Form 48 reports
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[
-                    { title: 'Weekly Attendance Report - Jan 15, 2024', format: 'PDF', date: '2024-01-15' },
-                    { title: 'Monthly Attendance Report - December 2023', format: 'EXCEL', date: '2024-01-01' },
-                    { title: 'Weekly Attendance Report - Jan 8, 2024', format: 'PDF', date: '2024-01-08' },
-                  ].map((report, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                          <FileText className="w-5 h-5 text-green-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium">{report.title}</p>
-                          <p className="text-sm text-muted-foreground">Generated on {report.date}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge variant="outline">{report.format}</Badge>
-                        <Button variant="outline" size="sm">Download</Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <ReportGenerator currentUser={currentUser} />
           </TabsContent>
 
           {currentUser.role === 'ADMIN' && (
@@ -443,9 +455,19 @@ export default function AttendanceDashboard() {
                             <p className="font-medium">{checkpoint.name}</p>
                             <p className="text-sm text-muted-foreground">Radius: {checkpoint.radius}</p>
                           </div>
-                          <Badge variant={checkpoint.status === 'Active' ? 'default' : 'secondary'}>
-                            {checkpoint.status}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={checkpoint.status === 'Active' ? 'default' : 'secondary'}>
+                              {checkpoint.status}
+                            </Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => setCheckpointToDelete({id: `checkpoint-${index}`, name: checkpoint.name})}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -491,6 +513,43 @@ export default function AttendanceDashboard() {
           )}
         </Tabs>
       </div>
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={checkpointToDelete !== null} onOpenChange={(open) => !open && setCheckpointToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Checkpoint</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{checkpointToDelete?.name}"? This action cannot be undone and will permanently remove the checkpoint and all associated attendance records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => setCheckpointToDelete(null)}
+              disabled={deletingCheckpoint}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => checkpointToDelete && deleteCheckpoint(checkpointToDelete.id, checkpointToDelete.name)}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={deletingCheckpoint}
+            >
+              {deletingCheckpoint ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Checkpoint
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

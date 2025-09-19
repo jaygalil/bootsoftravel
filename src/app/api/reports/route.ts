@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { ReportFormat } from '@prisma/client'
 import { 
   generateCSCForm48PDF, 
+  generateDualCSCForm48PDF,
   generateCSCForm48Excel, 
   calculateTotalHours,
   formatDate,
@@ -32,9 +33,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!Object.values(ReportFormat).includes(format)) {
+    if (!['PDF', 'DUAL_PDF', 'EXCEL'].includes(format)) {
       return NextResponse.json(
-        { error: 'Invalid format. Must be PDF or EXCEL' },
+        { error: 'Invalid format. Must be PDF, DUAL_PDF, or EXCEL' },
         { status: 400 }
       )
     }
@@ -104,10 +105,14 @@ export async function POST(request: NextRequest) {
     let contentType: string
     let fileName: string
 
-    if (format === ReportFormat.PDF) {
+    if (format === 'PDF') {
       fileBuffer = generateCSCForm48PDF(reportData)
       contentType = 'application/pdf'
       fileName = `CSC_Form_48_${user.name}_${startDate}_to_${endDate}.pdf`
+    } else if (format === 'DUAL_PDF') {
+      fileBuffer = generateDualCSCForm48PDF(reportData)
+      contentType = 'application/pdf'
+      fileName = `CSC_Form_48_Dual_${user.name}_${startDate}_to_${endDate}.pdf`
     } else {
       fileBuffer = generateCSCForm48Excel(reportData)
       contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -118,14 +123,14 @@ export async function POST(request: NextRequest) {
     const report = await db.report.create({
       data: {
         userId: targetUserId,
-        title: `CSC Form 48 - ${reportData.period}`,
-        format,
+        title: `CSC Form 48 ${format === 'DUAL_PDF' ? '(Dual)' : ''} - ${reportData.period}`,
+        format: format as any, // Convert to enum if needed
         generatedAt: new Date()
       }
     })
 
     // Return file as response
-    const response = new NextResponse(fileBuffer, {
+    const response = new NextResponse(Buffer.from(fileBuffer), {
       status: 200,
       headers: {
         'Content-Type': contentType,

@@ -5,6 +5,31 @@ import { UserRole } from '@prisma/client'
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if user is authenticated and is admin
+    const sessionCookie = request.cookies.get('user-session')
+    
+    if (!sessionCookie || !sessionCookie.value) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const session = JSON.parse(sessionCookie.value)
+    
+    // Get current user to verify admin role
+    const currentUser = await db.user.findUnique({
+      where: { id: session.userId },
+      select: { role: true }
+    })
+
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      return NextResponse.json(
+        { error: 'Admin access required' },
+        { status: 403 }
+      )
+    }
+
     const { email, password, name, role = UserRole.AGENT } = await request.json()
 
     // Validate input

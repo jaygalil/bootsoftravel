@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Tracker - Accident Prevention</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            padding: 30px;
+            text-align: center;
+            color: white;
+        }
+        
+        .status-display {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .status-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .status-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+        }
+        
+        .status-clocked-in { background: #28a745; }
+        .status-clocked-out { background: #dc3545; }
+        
+        .main-content {
+            padding: 30px;
+        }
+        
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .btn {
+            padding: 15px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        
+        .modal-header {
+            margin-bottom: 20px;
+        }
+        
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .warning-list {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        .warning-list li {
+            color: #856404;
+            margin: 5px 0;
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+        
+        .recent-activity {
+            margin-top: 30px;
+        }
+        
+        .activity-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .activity-time {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .activity-action {
+            color: #6c757d;
+            font-size: 14px;
+        }
+        
+        .undo-timer {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            margin: 15px 0;
+            font-weight: 600;
+            color: #1976d2;
+        }
+        
+        @media (max-width: 600px) {
+            .action-buttons {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                margin: 10px;
+                border-radius: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🕐 Time Tracker</h1>
+            <p>Smart Clock In/Out System with Accident Prevention</p>
+        </div>
+        
+        <div class="status-display">
+            <div class="status-card">
+                <div id="statusIcon" class="status-icon status-clocked-out">
+                    ⏰
+                </div>
+                <h3 id="statusText">Ready to Clock In</h3>
+                <p id="statusTime"></p>
+                <div id="undoTimer" class="undo-timer" style="display: none;">
+                    Can undo in <span id="undoCountdown">300</span> seconds
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="action-buttons">
+                <button id="clockInBtn" class="btn btn-success">
+                    🟢 Clock In
+                </button>
+                <button id="clockOutBtn" class="btn btn-danger" disabled>
+                    🔴 Clock Out
+                </button>
+                <button id="quickUndoBtn" class="btn btn-warning" style="display: none;">
+                    ↩️ Quick Undo
+                </button>
+                <button id="requestCorrectionBtn" class="btn btn-secondary">
+                    ✏️ Request Correction
+                </button>
+            </div>
+            
+            <div class="recent-activity">
+                <h3>Recent Activity</h3>
+                <div id="activityList">
+                    <!-- Activity items will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmationModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Confirm Action</h2>
+            </div>
+            <div id="modalBody">
+                <p id="confirmationMessage"></p>
+                <div id="warningsList" class="warning-list" style="display: none;">
+                    <strong>⚠️ Warnings:</strong>
+                    <ul id="warnings"></ul>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="cancelAction" class="btn btn-secondary">Cancel</button>
+                <button id="confirmAction" class="btn btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Correction Request Modal -->
+    <div id="correctionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Request Time Correction</h2>
+            </div>
+            <div id="correctionBody">
+                <form id="correctionForm">
+                    <div style="margin-bottom: 15px;">
+                        <label for="correctionType">Correction Type:</label>
+                        <select id="correctionType" style="width: 100%; padding: 8px; margin-top: 5px;">
+                            <option value="clock_in">Correct Clock In Time</option>
+                            <option value="clock_out">Correct Clock Out Time</option>
+                            <option value="cancel">Cancel Entry</option>
+                            <option value="manual">Manual Entry</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label for="correctionTime">Correct Time:</label>
+                        <input type="datetime-local" id="correctionTime" style="width: 100%; padding: 8px; margin-top: 5px;">
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label for="correctionReason">Reason (required):</label>
+                        <textarea id="correctionReason" rows="3" style="width: 100%; padding: 8px; margin-top: 5px;" placeholder="Explain why this correction is needed..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-actions">
+                <button id="cancelCorrection" class="btn btn-secondary">Cancel</button>
+                <button id="submitCorrection" class="btn btn-primary">Submit Request</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class TimeTrackerUI {
+            constructor() {
+                this.currentEmployeeId = 1; // Mock employee ID
+                this.currentStatus = null;
+                this.undoTimer = null;
+                this.pendingAction = null;
+                
+                this.initializeElements();
+                this.attachEventListeners();
+                this.updateStatus();
+                this.loadRecentActivity();
+            }
+            
+            initializeElements() {
+                this.elements = {
+                    statusIcon: document.getElementById('statusIcon'),
+                    statusText: document.getElementById('statusText'),
+                    statusTime: document.getElementById('statusTime'),
+                    clockInBtn: document.getElementById('clockInBtn'),
+                    clockOutBtn: document.getElementById('clockOutBtn'),
+                    quickUndoBtn: document.getElementById('quickUndoBtn'),
+                    requestCorrectionBtn: document.getElementById('requestCorrectionBtn'),
+                    undoTimer: document.getElementById('undoTimer'),
+                    undoCountdown: document.getElementById('undoCountdown'),
+                    confirmationModal: document.getElementById('confirmationModal'),
+                    correctionModal: document.getElementById('correctionModal'),
+                    activityList: document.getElementById('activityList')
+                };
+            }
+            
+            attachEventListeners() {
+                this.elements.clockInBtn.addEventListener('click', () => this.handleClockIn());
+                this.elements.clockOutBtn.addEventListener('click', () => this.handleClockOut());
+                this.elements.quickUndoBtn.addEventListener('click', () => this.handleQuickUndo());
+                this.elements.requestCorrectionBtn.addEventListener('click', () => this.showCorrectionModal());
+                
+                document.getElementById('cancelAction').addEventListener('click', () => this.hideModal('confirmationModal'));
+                document.getElementById('confirmAction').addEventListener('click', () => this.confirmPendingAction());
+                document.getElementById('cancelCorrection').addEventListener('click', () => this.hideModal('correctionModal'));
+                document.getElementById('submitCorrection').addEventListener('click', () => this.submitCorrection());
+            }
+            
+            async updateStatus() {
+                try {
+                    const response = await fetch(`/api/status/${this.currentEmployeeId}`);
+                    const status = await response.json();
+                    
+                    this.currentStatus = status;
+                    this.updateUI(status);
+                } catch (error) {
+                    console.error('Failed to update status:', error);
+                    this.showMockStatus();
+                }
+            }
+            
+            showMockStatus() {
+                // Mock data for demo
+                const mockStatus = {
+                    clocked_in: false,
+                    entry_id: null,
+                    clock_in_time: null,
+                    can_undo: false
+                };
+                this.currentStatus = mockStatus;
+                this.updateUI(mockStatus);
+            }
+            
+            updateUI(status) {
+                if (status.clocked_in) {
+                    this.elements.statusIcon.className = 'status-icon status-clocked-in';
+                    this.elements.statusIcon.textContent = '✅';
+                    this.elements.statusText.textContent = 'Currently Clocked In';
+                    this.elements.statusTime.textContent = `Since: ${new Date(status.clock_in_time).toLocaleString()}`;
+                    this.elements.clockInBtn.disabled = true;
+                    this.elements.clockOutBtn.disabled = false;
+                } else {
+                    this.elements.statusIcon.className = 'status-icon status-clocked-out';
+                    this.elements.statusIcon.textContent = '⏰';
+                    this.elements.statusText.textContent = 'Ready to Clock In';
+                    this.elements.statusTime.textContent = '';
+                    this.elements.clockInBtn.disabled = false;
+                    this.elements.clockOutBtn.disabled = true;
+                }
+                
+                if (status.can_undo) {
+                    this.elements.quickUndoBtn.style.display = 'block';
+                    this.startUndoTimer();
+                } else {
+                    this.elements.quickUndoBtn.style.display = 'none';
+                    this.elements.undoTimer.style.display = 'none';
+                }
+            }
+            
+            startUndoTimer() {
+                this.elements.undoTimer.style.display = 'block';
+                let countdown = 300; // 5 minutes
+                
+                this.undoTimer = setInterval(() => {
+                    countdown--;
+                    this.elements.undoCountdown.textContent = countdown;
+                    
+                    if (countdown <= 0) {
+                        clearInterval(this.undoTimer);
+                        this.elements.undoTimer.style.display = 'none';
+                        this.elements.quickUndoBtn.style.display = 'none';
+                    }
+                }, 1000);
+            }
+            
+            async handleClockIn() {
+                try {
+                    const response = await fetch('/api/clock-in', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            employee_id: this.currentEmployeeId,
+                            force: false
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    this.handleActionResult(result, 'clock-in');
+                } catch (error) {
+                    console.error('Clock in failed:', error);
+                    this.simulateClockIn();
+                }
+            }
+            
+            simulateClockIn() {
+                // Simulate successful clock in for demo
+                this.addActivity('Clock In', new Date(), '✅ Success');
+                this.currentStatus = {
+                    clocked_in: true,
+                    entry_id: Date.now(),
+                    clock_in_time: new Date().toISOString(),
+                    can_undo: true
+                };
+                this.updateUI(this.currentStatus);
+            }
+            
+            async handleClockOut() {
+                try {
+                    const response = await fetch('/api/clock-out', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            employee_id: this.currentEmployeeId,
+                            force: false
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    this.handleActionResult(result, 'clock-out');
+                } catch (error) {
+                    console.error('Clock out failed:', error);
+                    this.simulateClockOut();
+                }
+            }
+            
+            simulateClockOut() {
+                // Simulate successful clock out for demo
+                this.addActivity('Clock Out', new Date(), '🔴 Success');
+                this.currentStatus = {
+                    clocked_in: false,
+                    entry_id: null,
+                    clock_in_time: null,
+                    can_undo: true
+                };
+                this.updateUI(this.currentStatus);
+            }
+            
+            handleActionResult(result, action) {
+                if (result.success) {
+                    this.updateStatus();
+                    this.addActivity(action, new Date(), '✅ Success');
+                    if (result.warnings && result.warnings.length > 0) {
+                        this.showWarnings(result.warnings);
+                    }
+                } else if (result.requires_confirmation) {
+                    this.showConfirmationDialog(result, action);
+                } else {
+                    alert(result.error || result.errors?.join(', '));
+                }
+            }
+            
+            showConfirmationDialog(result, action) {
+                this.pendingAction = { action, force: true };
+                
+                document.getElementById('confirmationMessage').textContent = 
+                    `Are you sure you want to ${action.replace('-', ' ')}?`;
+                
+                if (result.warnings && result.warnings.length > 0) {
+                    document.getElementById('warningsList').style.display = 'block';
+                    const warningsList = document.getElementById('warnings');
+                    warningsList.innerHTML = result.warnings.map(w => `<li>${w}</li>`).join('');
+                } else {
+                    document.getElementById('warningsList').style.display = 'none';
+                }
+                
+                this.showModal('confirmationModal');
+            }
+            
+            async confirmPendingAction() {
+                if (!this.pendingAction) return;
+                
+                const { action } = this.pendingAction;
+                this.hideModal('confirmationModal');
+                
+                try {
+                    const endpoint = action === 'clock-in' ? '/api/clock-in' : '/api/clock-out';
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            employee_id: this.currentEmployeeId,
+                            force: true
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    this.handleActionResult(result, action);
+                } catch (error) {
+                    console.error('Confirmed action failed:', error);
+                    if (action === 'clock-in') this.simulateClockIn();
+                    else this.simulateClockOut();
+                }
+                
+                this.pendingAction = null;
+            }
+            
+            async handleQuickUndo() {
+                try {
+                    const response = await fetch('/api/quick-undo', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            employee_id: this.currentEmployeeId,
+                            entry_id: this.currentStatus.entry_id
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        this.updateStatus();
+                        this.addActivity('Undo', new Date(), '↩️ Success');
+                        if (this.undoTimer) {
+                            clearInterval(this.undoTimer);
+                        }
+                    } else {
+                        alert(result.error);
+                    }
+                } catch (error) {
+                    console.error('Undo failed:', error);
+                    // Simulate undo for demo
+                    this.currentStatus.clocked_in = !this.currentStatus.clocked_in;
+                    this.currentStatus.can_undo = false;
+                    this.updateUI(this.currentStatus);
+                    this.addActivity('Undo', new Date(), '↩️ Success');
+                }
+            }
+            
+            showCorrectionModal() {
+                // Set default datetime to current time
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                document.getElementById('correctionTime').value = now.toISOString().slice(0, 16);
+                
+                this.showModal('correctionModal');
+            }
+            
+            async submitCorrection() {
+                const form = document.getElementById('correctionForm');
+                const formData = new FormData(form);
+                
+                const correctionData = {
+                    employee_id: this.currentEmployeeId,
+                    time_entry_id: this.currentStatus.entry_id,
+                    correction_type: document.getElementById('correctionType').value,
+                    requested_time: document.getElementById('correctionTime').value,
+                    reason: document.getElementById('correctionReason').value
+                };
+                
+                if (!correctionData.reason.trim()) {
+                    alert('Please provide a reason for the correction.');
+                    return;
+                }
+                
+                this.hideModal('correctionModal');
+                
+                // Simulate successful submission
+                this.addActivity('Correction Request', new Date(), '📝 Submitted');
+                alert('Correction request submitted for approval.');
+            }
+            
+            loadRecentActivity() {
+                // Mock recent activity data
+                const mockActivities = [
+                    { action: 'Clock In', time: new Date(Date.now() - 3600000), status: '✅ Success' },
+                    { action: 'Clock Out', time: new Date(Date.now() - 7200000), status: '🔴 Success' },
+                    { action: 'Correction Request', time: new Date(Date.now() - 86400000), status: '📝 Approved' }
+                ];
+                
+                mockActivities.forEach(activity => {
+                    this.addActivity(activity.action, activity.time, activity.status);
+                });
+            }
+            
+            addActivity(action, time, status) {
+                const activityItem = document.createElement('div');
+                activityItem.className = 'activity-item';
+                activityItem.innerHTML = `
+                    <div class="activity-time">${time.toLocaleString()}</div>
+                    <div class="activity-action">${action} - ${status}</div>
+                `;
+                
+                this.elements.activityList.insertBefore(activityItem, this.elements.activityList.firstChild);
+                
+                // Keep only recent 10 activities
+                while (this.elements.activityList.children.length > 10) {
+                    this.elements.activityList.removeChild(this.elements.activityList.lastChild);
+                }
+            }
+            
+            showModal(modalId) {
+                document.getElementById(modalId).style.display = 'block';
+            }
+            
+            hideModal(modalId) {
+                document.getElementById(modalId).style.display = 'none';
+            }
+            
+            showWarnings(warnings) {
+                const warningText = warnings.join('\n');
+                setTimeout(() => {
+                    alert(`⚠️ Warnings:\n${warningText}`);
+                }, 100);
+            }
+        }
+        
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            new TimeTrackerUI();
+        });
+    </script>
+</body>
+</html>
